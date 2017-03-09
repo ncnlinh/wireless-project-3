@@ -7,7 +7,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
@@ -51,8 +50,15 @@ import org.nus.cirlab.mapactivity.DataStructure.RadioMap;
 import org.nus.cirlab.mapactivity.DataStructure.StepInfo;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.Vector;
 
@@ -90,6 +96,8 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             R.string.operation_label_load_local_file,
             R.string.operation_label_show,
             R.string.operation_label_localization,
+            R.string.operation_label_get_fingerprint,
+            R.string.operation_label_get_location_for_task_2,
             R.string.operation_label_default
     };
     int pointSize = 1;
@@ -106,7 +114,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
     private boolean isUpload = true;
     private boolean isUploadRadioMap = true;
     private boolean isSave = false;
-    //    private boolean isDownload = false;
+    private boolean isDownloadRadioMap = false;
     private boolean isShowRadioMap = false;
 //    private boolean isWiFiScanOn =false;
     private static final int REQUEST_PLACE_PICKER_UPLOAD = 1;
@@ -161,7 +169,6 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-        setRequestedOrientation (ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(map);
@@ -243,7 +250,6 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
                 break;
 
             case R.string.operation_label_load_local_file:
-                Log.wtf("hande","load local trace");
                 isUpload =false;
                 showFileChooser();
                 break;
@@ -251,7 +257,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             case R.string.operation_label_show:
                 if (mIsLocating)
                     mIsLocating = false;
-//                isDownloadRadioMap = true;
+                isDownloadRadioMap = true;
                 isUpload = false;
                 isSave = false;
                 isShowRadioMap = true;
@@ -275,6 +281,13 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
 //                    startLocalization();
 
                 }
+                break;
+            case R.string.operation_label_get_fingerprint:
+                Vector<Fingerprint> fingerprints = mPilocService.getFingerprint();
+                showFingerprintResultDialog(fingerprints);
+                break;
+            case R.string.operation_label_get_location_for_task_2:
+                startTask2();
                 break;
             case R.string.operation_label_default:
                 this.finish();
@@ -535,6 +548,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
         // constant values we can switch/case on, when choosing which style to apply.
         locationNames = new ArrayList<>();
         for (String place : locationList) {
+            Log.d("LOCATION", place);
             locationNames.add(place);
         }
         locationNames.add(getString(R.string.location_pick));
@@ -830,6 +844,9 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             try {
                 // Get radio map using the floor ID from server
                 mRadioMap = mPilocService.getRadioMap(mServerIP, floorPlanID, floorLevel);
+                Log.d("DOWNLOAD", mServerIP);
+                Log.d("DOWNLOAD", floorPlanID);
+                Log.d("DOWNLOAD", floorLevel);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -923,13 +940,36 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
         @Override
         protected void onPostExecute(String s) {
             if (locationList != null) {
-//                Toast.makeText(getBaseContext(), "Get map id successfully", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getBaseContext(), "Get map id successfully", Toast.LENGTH_SHORT).show();
                 showLocationDialog(locationList);
             } else
                 Toast.makeText(getBaseContext(), "Get map id failed", Toast.LENGTH_SHORT).show();
 
         }
     }
+
+    private class GetSoCLevel1RadioMapForTask2Task extends AsyncTask<String, Void, String> {
+        protected String doInBackground(String... s) {
+            try {
+                // Get radio map using the floor ID from server
+                mRadioMap = mPilocService.getRadioMap(mServerIP, "NUS School of Computing", "1");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            if (mRadioMap != null) {
+                Toast.makeText(getBaseContext(), "Get radioMap successfully", Toast.LENGTH_SHORT).show();
+                showResultLocationForTask2(mRadioMap);
+            } else
+                Toast.makeText(getBaseContext(), "Get radioMap failed", Toast.LENGTH_SHORT).show();
+
+        }
+    }
+
 
     private Boolean mIsLocating = false;
     private LatLng mCurrentLocation ;
@@ -981,6 +1021,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
         // try your own localization algorithm here
         LatLng Key = null;
         double sum;
+        int maxNumber = Integer.MIN_VALUE;
         double minScore = Double.MAX_VALUE;
 
         for (LatLng k : mRadioMap.mLocFingerPrints.keySet()) {
@@ -989,18 +1030,27 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             for (Fingerprint f1 : fp) {
                 for(Fingerprint f2 :mRadioMap.mLocFingerPrints.get(k)){
                     if(f1.mMac.equalsIgnoreCase(f2.mMac)){
+//                        Log.d("MATCHED", f1.mMac + " " + f1.mRSSI + " " +f2.mRSSI + " " + String.valueOf(f1.mRSSI - f2.mRSSI));
                         number++;
-                        sum += f1.mRSSI-f2.mRSSI;
+                        sum += Math.abs(f1.mRSSI-f2.mRSSI);
                         break;
                     }
                 }
             }
+            Log.d("COUNT", "Position: " + k.latitude + ", " + k.longitude);
+            Log.d("COUNT", String.valueOf(number) + " " + String.valueOf(sum));
 
-            if ( number > fp.size() / 3 && sum < minScore) {
+            if (number > maxNumber || (number == maxNumber && sum < minScore) || (number > maxNumber * 0.9 && sum < minScore * 0.7)) {
+                if ((number != maxNumber) && (number > maxNumber * 0.9 && sum < minScore * 0.7)) {
+                    Log.d("UPDATE", "special case considered");
+                }
+                maxNumber = number;
                 minScore = sum;
                 Key = new LatLng(k.latitude, k.longitude);
             }
         }
+        Log.d("RESULT", "Position: " + Key.latitude + ", " + Key.longitude);
+        Log.d("RESULT", String.valueOf(maxNumber) + " " + String.valueOf(minScore));
         return Key;
     }
 
@@ -1067,6 +1117,98 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
                 freePoint.circle.remove();
             }
         }
+    }
+
+    private void showFingerprintResultDialog(Vector<Fingerprint> fingerprints) {
+
+        StringBuilder sb = new StringBuilder();
+        for (Fingerprint f : fingerprints) {
+            sb.append(f.mMac);
+            sb.append(" ");
+            sb.append(f.mFrequency);
+            sb.append(" ");
+            sb.append(f.mRSSI);
+            sb.append("\n");
+        }
+
+        final String fingerprintText = sb.toString();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Fingerprints for current location");
+        builder.setMessage(fingerprintText);
+        builder.setPositiveButton("Save", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String root = getApplicationContext().getExternalCacheDir() + "/saved_fingerprint";
+                Log.d("dir",root);
+                File myDir = new File(root);
+                myDir.mkdirs();
+                String n = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ENGLISH).format(new Date());
+                String fname = "fp_"+ n +".txt";
+                File file = new File (myDir, fname);
+                if (file.exists ()) {
+                    file.delete ();
+                } else {
+                    try {
+                        file.createNewFile();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                try {
+                    FileOutputStream out = new FileOutputStream(file);
+                    out.write(fingerprintText.getBytes());
+                    out.flush();
+                    out.close();
+                    Toast.makeText(getApplicationContext(), "Results saved to " + fname, Toast.LENGTH_LONG).show();
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Toast.makeText(getApplicationContext(), "Failed to save result to " + fname, Toast.LENGTH_LONG).show();
+                }
+
+            }
+        });
+        builder.setNegativeButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // do nothing
+            }
+        });
+        builder.show();
+    }
+
+    private void startTask2() {
+        new GetSoCLevel1RadioMapForTask2Task().execute(null, null, null);
+    }
+
+    private void showResultLocationForTask2(RadioMap rm) {
+        Vector<Fingerprint> fingerprints = new Vector<>();
+        fingerprints.add(new Fingerprint("84:b8:02:00:3b:bb", 83, 0));
+        fingerprints.add(new Fingerprint("88:f0:31:8d:21:cf", 82, 0));
+        fingerprints.add(new Fingerprint("84:b8:02:00:3b:bf", 80, 0));
+        fingerprints.add(new Fingerprint("88:f0:31:8d:21:cb", 85, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:74:0c:09", 75, 0));
+        fingerprints.add(new Fingerprint("74:a2:e6:ec:55:c5", 71, 0));
+        fingerprints.add(new Fingerprint("74:a2:e6:ec:55:c9", 64, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:74:0d:9f", 69, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:44:05:aa", 85, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:0f:7e:89", 58, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:0f:7e:87", 51, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:74:0d:99", 66, 0));
+        fingerprints.add(new Fingerprint("a8:9d:21:0f:7e:8f", 45, 0));
+        final LatLng res = getLocation(rm, fingerprints);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+            if(locationMarker!=null){
+                locationMarker.remove();
+            }
+            locationMarker = mMap.addMarker(new MarkerOptions()
+                    .position(res)
+                    .title("Your Indoor Location"));
+            }
+        });
     }
 
     @Override
