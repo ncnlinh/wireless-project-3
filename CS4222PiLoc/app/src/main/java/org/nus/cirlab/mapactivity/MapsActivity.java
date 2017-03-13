@@ -1041,9 +1041,6 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             Log.d("COUNT", String.valueOf(number) + " " + String.valueOf(sum));
 
             if (number > maxNumber || (number == maxNumber && sum < minScore) || (number > maxNumber * 0.9 && sum < minScore * 0.7)) {
-                if ((number != maxNumber) && (number > maxNumber * 0.9 && sum < minScore * 0.7)) {
-                    Log.d("UPDATE", "special case considered");
-                }
                 maxNumber = number;
                 minScore = sum;
                 Key = new LatLng(k.latitude, k.longitude);
@@ -1206,7 +1203,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             }
             locationMarker = mMap.addMarker(new MarkerOptions()
                     .position(res)
-                    .title("Your Indoor Location"));
+                    .title("Task 2 Location"));
             }
         });
     }
