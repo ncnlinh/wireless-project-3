@@ -11,10 +11,12 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
+import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
@@ -49,8 +51,10 @@ import org.nus.cirlab.mapactivity.DataStructure.Fingerprint;
 import org.nus.cirlab.mapactivity.DataStructure.RadioMap;
 import org.nus.cirlab.mapactivity.DataStructure.StepInfo;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
@@ -959,6 +963,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
             return null;
         }
 
+        @RequiresApi(api = Build.VERSION_CODES.KITKAT)
         @Override
         protected void onPostExecute(String s) {
             if (mRadioMap != null) {
@@ -1179,6 +1184,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
         new GetSoCLevel1RadioMapForTask2Task().execute(null, null, null);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     private void showResultLocationForTask2(RadioMap rm) {
         Vector<Fingerprint> fingerprints = new Vector<>();
         fingerprints.add(new Fingerprint("84:b8:02:00:3b:bb", 83, 0));
@@ -1194,6 +1200,7 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
         fingerprints.add(new Fingerprint("a8:9d:21:0f:7e:87", 51, 0));
         fingerprints.add(new Fingerprint("a8:9d:21:74:0d:99", 66, 0));
         fingerprints.add(new Fingerprint("a8:9d:21:0f:7e:8f", 45, 0));
+
         final LatLng res = getLocation(rm, fingerprints);
         runOnUiThread(new Runnable() {
             @Override
@@ -1206,6 +1213,35 @@ public class MapsActivity extends AppCompatActivity implements OnMarkerDragListe
                     .title("Task 2 Location"));
             }
         });
+
+//        Vector<Vector<Fingerprint>> records = new Vector<>();
+//        String root = getApplicationContext().getExternalCacheDir() + "/saved_fingerprint";
+//        File dir = new File(root);
+//        for (final File fileEntry : dir.listFiles()) {
+//            if (!fileEntry.getName().contains("19:")) {
+//                continue;
+//            }
+//            Vector<Fingerprint> temp = new Vector<>();
+//            try (BufferedReader br = new BufferedReader(new FileReader(fileEntry))) {
+//                String line;
+//                while ((line = br.readLine()) != null) {
+//                    temp.add(new Fingerprint(line.split(" ")[0], Integer.parseInt(line.split(" ")[2]), 0));
+//                }
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//            final LatLng res = getLocation(rm, temp);
+//            runOnUiThread(new Runnable() {
+//                @Override
+//                public void run() {
+//
+//                locationMarker = mMap.addMarker(new MarkerOptions()
+//                        .position(res)
+//                        .title(fileEntry.getName()));
+//                }
+//            });
+//        }
+
     }
 
     @Override
